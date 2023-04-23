@@ -76,6 +76,42 @@ class Pluribus:
         loss.backward()
         self.optimizer.step()
 
+class Pluribus:
+    def __init__(self, num_players, state_size, action_size):
+        self.num_players = num_players
+        self.state_size = state_size
+        self.action_size = action_size
+
+        # Add self_play method for self-play training
+        self.self_play()
+
+        self.policy = Policy(self.state_size, self.action_size)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=1e-4)
+
+    def self_play(self):
+        self.self_play_num = 10
+
+    def train(self, episodes):
+        for episode in range(episodes):
+            for player in range(self.num_players):
+                # Self-play
+                if player == 0:
+                    self.self_play_num -= 1
+                    if self.self_play_num <= 0:
+                        return
+                    self.self_play()
+
+                state = self.game.get_state(player)
+                action = self.select_action(state, player)
+
+                # Update state and rewards
+                self.game.update_state(player, action)
+                rewards = self.game.get_rewards()
+
+                # Update policy
+                trajectory = (state, action, rewards[player])
+                self.update_policy(trajectory)        
+        
 class History:
     def __init__(self, h):
         self.preflop = h.preflop;
