@@ -30,6 +30,52 @@ ranks = [6, 7, 8, 9, "T", "J", "Q", "K", "A"];
 ALL_ACTIONS = ["fold", "call", "check", "none", "bet"]; //bet2
 treeMap = {};
 
+class Pluribus:
+    def __init__(self, num_players, state_size, action_size):
+        self.num_players = num_players
+        self.state_size = state_size
+        self.action_size = action_size
+
+        # Add discretize_action_space method to discretize action space
+        self.discretize_action_space()
+
+        self.policy = Policy(self.state_size, self.action_size)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=1e-4)
+
+    def discretize_action_space(self):
+        self.num_buckets = 10
+        self.bucket_size = (ACTION_SPACE_HIGH - ACTION_SPACE_LOW) / self.num_buckets
+        self.action_buckets = np.arange(ACTION_SPACE_LOW, ACTION_SPACE_HIGH + self.bucket_size, self.bucket_size)
+
+    def action_probabilities(self, state):
+        state = torch.FloatTensor(state)
+        logits = self.policy(state)
+        probabilities = F.softmax(logits, dim=-1)
+
+        # Discretize action space
+        probabilities = torch.zeros(self.action_size)
+        action_bucket_indices = (self.action_buckets - ACTION_SPACE_LOW) // self.bucket_size
+        for i, index in enumerate(action_bucket_indices):
+            probabilities[index] += probabilities[i]
+
+        return probabilities
+
+    def update_policy(self, trajectory):
+        states, actions, rewards = trajectory
+
+        # Discretize action space
+        actions = (actions - ACTION_SPACE_LOW) // self.bucket_size
+
+        # Calculate loss using restricted policy gradient
+        log_probabilities = self.policy.log_probabilities(states, actions)
+        objective = (log_probabilities * rewards).sum()
+        loss = -1 * objective
+
+        # Update policy parameters
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
 class History:
     def __init__(self, h):
         self.preflop = h.preflop;
