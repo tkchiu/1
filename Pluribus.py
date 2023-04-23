@@ -111,7 +111,54 @@ class Pluribus:
                 # Update policy
                 trajectory = (state, action, rewards[player])
                 self.update_policy(trajectory)        
-        
+
+class Pluribus:
+    def __init__(self, num_players, state_size, action_size):
+        self.num_players = num_players
+        self.state_size = state_size
+        self.action_size = action_size
+
+        # Add build_dqn method to build DQN model
+        self.build_dqn()
+
+        self.policy = Policy(self.state_size, self.action_size)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=1e-4)
+
+    def build_dqn(self):
+        self.dqn = DQN(self.state_size, self.action_size)
+        self.dqn_optimizer = optim.Adam(self.dqn.parameters(), lr=1e-4)
+
+    def train(self, episodes):
+        for episode in range(episodes):
+            for player in range(self.num_players):
+                state = self.game.get_state(player)
+
+                # Select action using DQN
+                if player == 0:
+                    action = self.select_action(state, player)
+                else:
+                    action = self.select_action(state, player)
+
+                # Update state and rewards
+                self.game.update_state(player, action)
+                rewards = self.game.get_rewards()
+
+                # Update DQN
+                next_state = self.game.get_state(player)
+                next_action = self.select_action(next_state, player)
+                next_q_value = self.dqn(next_state, next_action).detach().max(1)[0]
+                target_q_value = rewards[player] + GAMMA * next_q_value
+                q_value = self.dqn(state, action)
+                dqn_loss = F.mse_loss(q_value, target_q_value)
+
+                self.dqn_optimizer.zero_grad()
+                dqn_loss.backward()
+                self.dqn_optimizer.step()
+
+                # Update policy
+                trajectory = (state, action, rewards[player])
+                self.update_policy(trajectory)                
+                
 class History:
     def __init__(self, h):
         self.preflop = h.preflop;
