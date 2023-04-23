@@ -121,16 +121,42 @@ class Pluribus:
             self.memory.add(state, action, reward, next_state)
             state = copy.deepcopy(next_state)
             
-    def train_dqn(self):
-        for i in range(self.num_episodes):
-            batch = self.memory.sample(self.batch_size)
-            states = np.zeros((self.batch_size, self.num_players, 3, 52))
-            actions = np.zeros((self.batch_size,))
-            rewards = np.zeros((self.batch_size, self.num_players))
-            next_states = np.zeros((self.batch_size, self.num_players, 3, 52))
-            for j in range(self.batch_size):
-                states[j] = self.state_to_input(batch[j].state)
-                actions[j] = batch[j].action
-                rewards[j] = batch[j].reward
-                next_states[j] = self.state_to_input(batch[j].next_state)
-            q_values = self.sess.run
+
+def train_dqn(env, q_net, target_net, optimizer, memory, batch_size, gamma):
+    state = env.reset()
+    done = False
+    total_reward = 0
+    while not done:
+        action = select_action(state, q_net)
+        next_state, reward, done, _ = env.step(action)
+        memory.push(state, action, reward, next_state, done)
+        state = next_state
+        total_reward += reward
+
+        # Train the network using a random batch of experiences from memory
+        if len(memory) > batch_size:
+            experiences = memory.sample(batch_size)
+            states, actions, rewards, next_states, dones = zip(*experiences)
+
+            # Convert the experience tuples to PyTorch tensors
+            states = torch.tensor(states, dtype=torch.float32)
+            actions = torch.tensor(actions, dtype=torch.long).unsqueeze(1)
+            rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1)
+            next_states = torch.tensor(next_states, dtype=torch.float32)
+            dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1)
+
+            # Compute the Q values for the current state and the next state using the Q network and the target network
+            q_values = q_net(states).gather(1, actions)
+            next_q_values = target_net(next_states).detach().max(1)[0].unsqueeze(1)
+            expected_q_values = rewards + gamma * next_q_values * (1 - dones)
+
+            # Compute the loss and update the Q network
+            loss = F.mse_loss(q_values, expected_q_values)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            # Update the target network
+            update_target(target_net, q_net)
+
+    return total_reward
